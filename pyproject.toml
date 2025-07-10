@@ -1,0 +1,22 @@
+[project]
+name = "resume-matcher"
+version = "0.1.0"
+description = "A tool to assess whether a resume is a good fit for a specidfied job"
+authors = [
+    {name = "Ankita Verma",email = "ankita.av.934@gmail.com"}
+]
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "requests (>=2.32.4,<3.0.0)",
+    "bs4 (>=0.0.2,<0.0.3)",
+    "pdfplumber (>=0.11.7,<0.12.0)",
+    "openai (>=1.93.3,<2.0.0)",
+    "regex (>=2024.11.6,<2025.0.0)",
+    "imap-tools (>=1.11.0,<2.0.0)",
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
