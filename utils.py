@@ -18,7 +18,13 @@ JOB_KEYWORDS = [
 EXCLUDE_KEYWORDS = [
     'liked your', 'viewed your profile', 'connection request',
     'endorsed you', 'work anniversary', 'network update',
-    'people you may know', 'trending in your network'
+    'people you may know', 'trending in your network', 'shared a post', 
+    'conversation', 'invitations', 'newsletter', 'course', 'stories'
+]
+
+EXCLUDE_DOMAINS = [
+    'noreply@', 'no-reply@', 'donotreply@', 'notifications@',
+    'newsletter@', 'marketing@', 'promo@', 'offers@'
 ]
 
 # Trusted job domains
@@ -96,29 +102,40 @@ def score_resume(job_desc, resume_text):
 # res = connect_email(USERNAME, PASSWORD)
 # print(res)
 
-def connect_to_gmail(username, password):
-    """Function to connect to the gmail account"""
-    try:
-        mb = MailBox('imap.gmail.com').login(username, password)
-        print("Connected to Gmail Successfully")
-        return mb
-    except Exception as e:
-        print(f"Connection failed {e}")
-        return None
+# def connect_to_gmail(username, password):
+#     """Function to connect to the gmail account"""
+#     try:
+#         mb = MailBox('imap.gmail.com').login(username, password, 'INBOX')
+#         print("Connected to Gmail Successfully")
+#         return mb
+#     except Exception as e:
+#         print(f"Connection failed {e}")
+#         return None
     
-def disconnect_from_gmail(mailbox):
-    """Function to disconnect client from gmail"""
-    if mailbox:
-        mailbox.logout()
-        print("Disconnected from Gmail")
+# def disconnect_from_gmail(mailbox):
+#     """Function to disconnect client from gmail"""
+#     if mailbox:
+
+#         mailbox.logout()
+#         print("Disconnected from Gmail")
 
 def extract_text_from_html(html_content):
     """Extract clean text from HTML Content"""
     try:
+        if not html_content or '<' not in html_content:
+            return html_content.strip() if html_content else ""
         html_content = re.sub(r'<(script|style|head|meta|link|title)[^>]*>.*?</\1>', '', html_content, flags=re.DOTALL | re.IGNORECASE)
+        html_content = re.sub(r'<!DOCTYPE[^>]*>', '', html_content, flags=re.IGNORECASE)
+        
+        # Remove XML declarations
+        html_content = re.sub(r'<\?xml[^>]*\?>', '', html_content, flags=re.IGNORECASE)
+        
+        # Remove HTML comments
+        html_content = re.sub(r'<!--.*?-->', '', html_content, flags=re.DOTALL)
+        
         soup = BeautifulSoup(html_content, "html.parser")
 
-        for element in soup(['script', 'style', 'head', 'meta', 'link', 'title']):
+        for element in soup(['script', 'style', 'head', 'meta', 'link', 'title', 'nonscript']):
             element.decompose()
 
         text = soup.get_text()
@@ -127,32 +144,42 @@ def extract_text_from_html(html_content):
         text = '\n'.join(line for line in lines if line)
 
         text = re.sub(r'\n\s*\n', '\n\n', text)  # Multiple newlines to double newlines
-        text = re.sub(r' +', ' ', text)  # Multiple spaces to single space
+        text = re.sub(r'[ \t]+', ' ', text)  # Multiple spaces to single space
+        text = re.sub(r'\n ', '\n', text)  # Remove space after newlines
+        text = re.sub(r' \n', '\n', text)  # Remove space before newlines   
         
         return text.strip()
         
     except Exception as e:
         print(f"Error extracting text from email {e}")
-        # Fallback: simple regex HTML tag removal
-        text = re.sub(r'<[^>]+>', '', html_content)
-        text = re.sub(r'\s+', ' ', text)
-        return text.strip()
+        try:
+            # Remove style and script content first
+            html_content = re.sub(r'<style[^>]*>.*?</style>', '', html_content, flags=re.DOTALL | re.IGNORECASE)
+            html_content = re.sub(r'<script[^>]*>.*?</script>', '', html_content, flags=re.DOTALL | re.IGNORECASE)
+            
+            # Remove all HTML tags
+            text = re.sub(r'<[^>]+>', '', html_content)
+            
+            # Clean whitespace
+            text = re.sub(r'\s+', ' ', text)
+            text = re.sub(r'\n\s*\n', '\n\n', text)
+            
+            return text.strip()
+        except:
+            return html_content[:500] + "..." if len(html_content) > 500 else html_content
+
 
 def get_email_content(msg):
     """Extract email content from email"""
     content = ""
     if msg.text and msg.text.strip():
-        content += msg.text.strip()
-    elif msg.html and msg.html.strip():
-        content += extract_text_from_html(msg.html)
-        # If extraction failed or returned HTML, try a simpler approach
-        if content.startswith('<!DOCTYPE') or '<html' in content[:100]:
-            # Fallback: use regex to strip basic HTML tags
-            content = re.sub(r'<[^>]+>', '', msg.html)
-            content = re.sub(r'\s+', ' ', content)  # Clean up whitespace
-            content = content.strip()
-    
-    # If still no content, try to get any available text
+        content = msg.text.strip()
+    if msg.html and msg.html.strip():
+        content = extract_text_from_html(msg.html)
+        if content and len(content.strip()) > 10:
+            # Additional check: if content still looks like HTML, it failed
+            if not (content.startswith('<!DOCTYPE') or '<html' in content[:100]):
+                return content
     if not content:
         content = str(msg).split('\n\n', 1)[-1] if '\n\n' in str(msg) else "No content available"
     
@@ -167,8 +194,8 @@ def is_job_related(subject, sender, content):
         if exclude_word in all_text:
             return False
     
-    for domain in TRUSTED_DOMAINS:
-        if domain in sender.lower():
+    for domain in TRUSTED_DOMAINS :
+        if domain in sender.lower() and domain not in EXCLUDE_DOMAINS:
             return True
         
     job_keyword_count = sum(1 for keyword in JOB_KEYWORDS if keyword in all_text)
@@ -209,7 +236,7 @@ def filter_job_emails(mailbox, days_back = 10):
                 print("Error processing email: {e}")
                 continue
 
-        print(f"\n📧 Found {len(job_emails)} job-related emails out of {processed_count} total emails")
+        print(f"\n Found {len(job_emails)} job-related emails out of {processed_count} total emails")
         return job_emails
     
     except Exception as e:
@@ -242,16 +269,16 @@ def save_emails(job_emails, filename = "job_emails.txt"):
                 
                 f.write("\n" + "=" * 60 + "\n\n")
         
-        print(f"✓ Job emails saved to {filename}")
+        print(f"Job emails saved to {filename}")
         return True
     except Exception as e:
         print("Error saving to file: {e}")
         return False
     
 
-def extract_job_emails(username, password, days_back = 10, output_file = "job_emails.txt"):
+def extract_job_emails(mailbox, days_back = 10, output_file = "job_emails.txt"):
     """Main function to extract job emails"""
-    mailbox = connect_to_gmail(username, password)
+    # mailbox = connect_to_gmail(username, password)
     if not mailbox:
         return []
     
@@ -275,9 +302,10 @@ def extract_job_emails(username, password, days_back = 10, output_file = "job_em
         if job_emails:
             save_emails(job_emails, output_file)
         return job_emails
-    
-    finally:
-        disconnect_from_gmail(mailbox)
+    except Exception as e:
+        return f"Error: {e}"
+    # finally:
+    #     disconnect_from_gmail(mailbox)
 
 def main():
     """Main function to run the job email extractor"""
@@ -294,7 +322,7 @@ def main():
         output_file="job_emails.txt"
     )
     
-    print(f"\n🎉 Extraction complete! Found {len(job_emails)} job-related emails.")
+    print(f"\nExtraction complete! Found {len(job_emails)} job-related emails.")
     
     # Optional: Show statistics
     if job_emails:
@@ -303,7 +331,7 @@ def main():
             domain = email['sender'].split('@')[-1].split('>')[0] if '@' in email['sender'] else 'unknown'
             domains[domain] = domains.get(domain, 0) + 1
         
-        print(f"\n📊 Top domains:")
+        print(f"\n Top domains:")
         for domain, count in sorted(domains.items(), key=lambda x: x[1], reverse=True)[:5]:
             print(f"  {domain}: {count} emails")
 
