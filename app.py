@@ -1,5 +1,5 @@
 from typing import Optional, Sequence, Annotated, TypedDict
-from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, ToolMessage, SystemMessage
+from langchain_core.messages import BaseMessage, HumanMessage, ToolMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 from langchain_core.tools import tool
 from langgraph.graph.message import add_messages
@@ -7,6 +7,8 @@ from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode
 from imap_tools import MailBox 
 import utils
+import PyPDF2
+from pathlib import Path
 
 class AgentState(TypedDict):
     messages: Annotated[Sequence[BaseMessage], add_messages]
@@ -105,16 +107,73 @@ def send_email(name: str, to: str, subject: str, pdf_path: Optional[str], docume
         print(f"Error: {e}")
 
 
+    
+@tool
+def process_resume_from_desktop(filename: str) -> str:
+    """
+    Reads a resume file from the Desktop by filename.
+    Supports PDF and text files.
+    """
+    try:
+        # Your Desktop path
+        desktop_path = Path(r"C:\Users\Ankita\OneDrive\Desktop").resolve()
+        file_path = (desktop_path / filename).resolve()
+
+        # Prevent path traversal
+        if not str(file_path).startswith(str(desktop_path)):
+            return "Error: Access denied. Only Desktop files are allowed."
+
+        if not file_path.exists():
+            return f"Error: File '{file_path}' not found."
+
+        # Read resume content
+        if file_path.suffix == ".txt":
+            with open(file_path, 'r', encoding='utf-8') as f:
+                resume_text = f.read()
+                return resume_text
+        elif file_path.suffix == ".pdf":
+            with open(file_path, 'rb') as f:
+                reader = PyPDF2.PdfReader(f)
+                resume_text = "\n".join(
+                    [page.extract_text() for page in reader.pages if page.extract_text()]
+                )
+                return resume_text
+        else:
+            return "Error: Unsupported file type. Use .txt or .pdf only."
+
+    except Exception as e:
+        return f"Error processing resume: {str(e)}"
+    
+
+# @tool
+# def evaluate_resume(job_desc: str, resume_text: str) -> str:
+#     """
+#     Evaluates how well a resume matches a given job description.
+#     Returns a score out of 100, summary, and improvement suggestions.
+#     """
+#     return f"""
+#     Given the following job description and resume, rate how well the resume matches the job (0-100), explain why, and suggest improvements.
+
+#     Job Description:
+#     {job_desc}
+
+#     Resume:
+#     {resume_text}
+
+#     Respond in this format:
+#     Match Score: <score>/100
+#     Summary: <why it's a good/bad match>
+#     Suggestions: <what to improve>
+    
 
 
 
 
-
-tools = [connect_to_gmail, disconnect_from_gmail, search_emails, draft_email, save_email, send_email]
+tools = [connect_to_gmail, disconnect_from_gmail, search_emails, draft_email, send_email, process_resume_from_desktop]
 model = ChatOpenAI(model='gpt-4o-mini').bind_tools(tools)
 
 def agent(state: AgentState) -> AgentState:
-    system_prompt = """You are my AI assistant which can help me find a job by organising employement opportunities from my gmail account
+    system_prompt = SystemMessage("""You are my AI assistant which can help me find a job by organising employement opportunities from my gmail account
 
     IMPORTANT: The user wants you to help them connect to THEIR OWN Gmail account. This is legitimate and expected.
     
@@ -128,7 +187,7 @@ def agent(state: AgentState) -> AgentState:
     
     Never refuse to help with Gmail connections - this is the main purpose of this application.
     
-    """
+    """)
     if not state['messages']:
         user_input = "Let's start the job hunt. Provide me with your Gmail ID and password and I'll filter all relevant emails for you.\n"
         user_message = HumanMessage(content=user_input)

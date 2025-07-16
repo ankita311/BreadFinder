@@ -1,10 +1,7 @@
 from typing import Optional
 from bs4 import BeautifulSoup
-import requests
-import pdfplumber
-from openai import OpenAI
 import re
-from imap_tools import MailBox, AND 
+from imap_tools import AND 
 from datetime import datetime, timedelta
 from email.mime.application import MIMEApplication
 import os
@@ -38,63 +35,6 @@ TRUSTED_DOMAINS = [
     'naukri.com', 'indeed.com', 'glassdoor.com', 'linkedin.com/jobs',
     'unstop.com', 'internshala.com', 'devfolio.co', 'github.com'
 ]
-
-
-
-def extract_job_description(url):
-    response = requests.get(url)
-    soup = BeautifulSoup(response.text, 'html.parser')
-    job_text = soup.get_text()
-
-    return job_text.strip()
-
-
-# url = "https://unstop.com/jobs/mendix-developer-birlasoft-1509147"        #Forbidden
-# url = "https://southasiacareers.deloitte.com/job/Hyderabad-Associate-F&A-Operate-Procure-to-Pay-Hyderabad-Finance-Transformation/41184344/"  #worked
-
-# print(job)
-
-def extract_resume_text(pdf_path):
-    doc = pdfplumber.open(pdf_path)
-    text = ""
-    for page in doc.pages:
-        text += page.extract_text()
-    return text
-
-# path = "file:///C:/Users/Ankita/OneDrive/Desktop/Notes/Ankita%20CV.pdf"
-path = r"C:\Users\Ankita\OneDrive\Desktop\Notes\AnkitaCV.pdf"
-
-# print(resume)
-client = OpenAI()
-def score_resume(job_desc, resume_text):
-    prompt = f"""
-    Given the following job description and resume, rate how well the resume matches the job (0-100), explain why, and suggest improvements.
-
-    Job Description:
-    {job_desc}
-
-    Resume:
-    {resume_text}
-
-    Respond in this format:
-    Match Score: <score>/100
-    Summary: <why it's a good/bad match>
-    Suggestions: <what to improve>
-    """
-    
-    response = client.chat.completions.create(
-        model = 'gpt-4o-mini',
-        messages= [{'role': 'user', 'content': prompt}],
-        temperature= 0.4
-    )
-    return response.choices[0].message.content
-
-
-# url = "https://southasiacareers.deloitte.com/job/Bengaluru-T&T-Engineering-EAD-QE-Automation-Python-Bangalore-Consultant/41851644/"
-# job = extract_job_description(url)
-# resume = extract_resume_text(path)
-# result = score_resume(job, resume)
-# print(result)
 
 
 def extract_text_from_html(html_content):
@@ -307,21 +247,20 @@ def send_mails(username: str, password: str, name: str, to: str, subject: str, p
         msg['To'] = to
         msg['Subject'] = subject
 
-        # with open('Email_to_Boss_About_Raise.txt', 'r') as f:
-        #     message = f.read()
         message = document_content
         msg.attach(MIMEText(message, 'plain'))
         
         if pdf_path and os.path.exists(pdf_path):
             attach_pdf(msg, pdf_path)
             print(f"PDF attachment added: {pdf_path}")
+            text = msg.as_string()
+
+            server.sendmail(username, to, text)
+            
         elif pdf_path:
             print(f"Warning: PDF file not found at {pdf_path}")
-
-        text = msg.as_string()
-
-        server.sendmail(username, to, text)
+            print("Mail not sent")
         server.quit()
-
+        
     except Exception as e:
         raise RuntimeError(f"Failed to send email: {e}")
