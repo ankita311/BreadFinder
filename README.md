@@ -13,7 +13,7 @@ An AI-powered assistant that helps automate job search tasks by connecting to yo
 
 ## Prerequisites
 
-- Python 3.7+
+- Python 3.12+
 - Gmail account with app-specific password enabled
 - OpenAI API key
 
