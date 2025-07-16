@@ -22,7 +22,7 @@ An AI-powered assistant that helps automate job search tasks by connecting to yo
 1. Clone the repository:
 ```bash
 git clone <repository-url>
-cd job-search-agent
+cd bread-finder
 ```
 
 2. Install required dependencies:
