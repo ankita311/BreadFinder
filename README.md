@@ -1,4 +1,4 @@
-# BREADFINDER - Job Search Agent
+# BREAD FINDER - Job Search Agent
 
 An AI-powered assistant that helps automate job search tasks by connecting to your Gmail account to find and organize job-related emails.
 
