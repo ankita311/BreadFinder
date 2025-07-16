@@ -189,12 +189,11 @@ def agent(state: AgentState) -> AgentState:
     
     """)
     if not state['messages']:
-        user_input = "Let's start the job hunt. Provide me with your Gmail ID and password and I'll filter all relevant emails for you.\n"
+        user_input = input("Let's start the job hunt. Provide me with your Gmail ID and App password and I'll filter all relevant emails for you.\n")
         user_message = HumanMessage(content=user_input)
 
     else:
         user_input = input("\nWhat shall we do next?\n")
-        print(f"\n USER: {user_input}")
         user_message = HumanMessage(content=user_input)
 
     response = model.invoke([system_prompt] + list(state['messages']) + [user_message])
