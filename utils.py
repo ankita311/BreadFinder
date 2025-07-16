@@ -1,3 +1,4 @@
+from typing import Optional
 from bs4 import BeautifulSoup
 import requests
 import pdfplumber
@@ -5,6 +6,11 @@ from openai import OpenAI
 import re
 from imap_tools import MailBox, AND 
 from datetime import datetime, timedelta
+from email.mime.application import MIMEApplication
+import os
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
 
 # Job-related keywords for filtering
@@ -90,34 +96,6 @@ def score_resume(job_desc, resume_text):
 # result = score_resume(job, resume)
 # print(result)
 
-# def connect_email(username, app_pass):
-#     imap = imaplib.IMAP4_SSL("imap.gmail.com")
-#     imap.login(username, app_pass)
-#     for i in imap.list()[1]:
-#         l = i.decode().split('"/"')
-#         print(l[0] + " = " + l[1])
-
-    
-
-# res = connect_email(USERNAME, PASSWORD)
-# print(res)
-
-# def connect_to_gmail(username, password):
-#     """Function to connect to the gmail account"""
-#     try:
-#         mb = MailBox('imap.gmail.com').login(username, password, 'INBOX')
-#         print("Connected to Gmail Successfully")
-#         return mb
-#     except Exception as e:
-#         print(f"Connection failed {e}")
-#         return None
-    
-# def disconnect_from_gmail(mailbox):
-#     """Function to disconnect client from gmail"""
-#     if mailbox:
-
-#         mailbox.logout()
-#         print("Disconnected from Gmail")
 
 def extract_text_from_html(html_content):
     """Extract clean text from HTML Content"""
@@ -206,7 +184,7 @@ def filter_job_emails(mailbox, days_back = 10):
     try:
         since_date = datetime.now() - timedelta(days=days_back)
         since_date_only = since_date.date()
-        messages = mailbox.fetch(AND(date_gte=since_date_only))
+        messages = mailbox.fetch(AND(date_gte=since_date_only), reverse=True)
 
         job_emails = []
         processed_count = 0
@@ -304,98 +282,46 @@ def extract_job_emails(mailbox, days_back = 10, output_file = "job_emails.txt"):
         return job_emails
     except Exception as e:
         return f"Error: {e}"
-    # finally:
-    #     disconnect_from_gmail(mailbox)
+    
 
-def main():
-    """Main function to run the job email extractor"""
-    
-    # Get credentials
-    username = input("Enter your Gmail address: ")
-    password = input("Enter your App Password: ")
-    
-    # Extract job emails
-    job_emails = extract_job_emails(
-        username=username,
-        password=password,
-        days_back=10,
-        output_file="job_emails.txt"
-    )
-    
-    print(f"\nExtraction complete! Found {len(job_emails)} job-related emails.")
-    
-    # Optional: Show statistics
-    if job_emails:
-        domains = {}
-        for email in job_emails:
-            domain = email['sender'].split('@')[-1].split('>')[0] if '@' in email['sender'] else 'unknown'
-            domains[domain] = domains.get(domain, 0) + 1
+def attach_pdf(msg, pdf_path):
+    try:
+        with open(pdf_path, 'rb') as attachment:
+            part = MIMEApplication(attachment.read(), _subtype='pdf')
+            part.add_header('Content-Disposition', f'attachment; filename= {os.path.basename(pdf_path)}')
+            msg.attach(part)
+    except Exception as e:
+        print(f"Error attaching PDF: {e}")
+
+
+def send_mails(username: str, password: str, name: str, to: str, subject: str, pdf_path: Optional[str], document_content):
+    try:
+        server = smtplib.SMTP('smtp.gmail.com', 587)
+        server.ehlo()
+        server.starttls()  # Enable TLS encryption
+        server.ehlo() 
+        server.login(username, password)
+
+        msg = MIMEMultipart()
+        msg['From'] = name
+        msg['To'] = to
+        msg['Subject'] = subject
+
+        # with open('Email_to_Boss_About_Raise.txt', 'r') as f:
+        #     message = f.read()
+        message = document_content
+        msg.attach(MIMEText(message, 'plain'))
         
-        print(f"\n Top domains:")
-        for domain, count in sorted(domains.items(), key=lambda x: x[1], reverse=True)[:5]:
-            print(f"  {domain}: {count} emails")
+        if pdf_path and os.path.exists(pdf_path):
+            attach_pdf(msg, pdf_path)
+            print(f"PDF attachment added: {pdf_path}")
+        elif pdf_path:
+            print(f"Warning: PDF file not found at {pdf_path}")
 
+        text = msg.as_string()
 
-# def test_html_extraction():
-#     """Test function to debug HTML extraction"""
-#     sample_html = """
-#     <!DOCTYPE html>
-#     <html>
-#     <head><title>Test</title>
-#     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+        server.sendmail(username, to, text)
+        server.quit()
 
-#     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-
-#     <title>General</title>
-
-#     <meta name="author" content="" content="" />
-
-#     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-
-#     <meta name="x-apple-disable-message-reformatting">
-
-#     <style type="text/css">
-
-#         @import  url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
-
-
-
-#         body {
-
-#             width: auto;
-
-#             background-color: #F6F8FA;
-
-#             margin: 0 auto;
-
-#             padding: 0;
-
-#             font-size: 14px;
-
-#             -webkit-text-size-adjust: 100% !important;
-
-#             -ms-text-size-adjust: 100% !important;
-
-#             -webkit-font-smoothing: antialiased;
-
-#             font-family: "Inter", sans-serif;
-
-#         }</head>
-#     <body>
-#         <h1>Adobe India Hackathon 2025</h1>
-#         <p>Join us for an exciting hackathon!</p>
-#         <p>Registration deadline: July 15, 2025</p>
-#         <a href="https://example.com">Apply now</a>
-#     </body>
-#     </html>
-#     """
-    
-#     extracted = extract_text_from_html(sample_html)
-#     print("Extracted text:")
-#     print(extracted)
-#     return extracted
-
-
-if __name__ == "__main__":
-    # test_html_extraction()
-    main()
+    except Exception as e:
+        raise RuntimeError(f"Failed to send email: {e}")

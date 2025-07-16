@@ -65,8 +65,52 @@ def search_emails(days_back: Optional[int] = 10) -> str:
     except Exception as e:
         return e
 
+@tool
+def draft_email(content: str) -> str:
+    '''Drafts and Updates the document with the provided content'''
+    global document_content
+    document_content = content
+    return f"Document has been updated successfully! The current content is: \n{document_content}"
 
-tools = [connect_to_gmail, disconnect_from_gmail, search_emails]
+@tool
+def save_email(filename: str) -> str:
+    """Save the current document to a text file and finish the process
+    Args:
+        filename: Name for the text file
+    """
+    global document_content
+
+    if not filename.endswith('.txt'):
+        filename = f'{filename}.txt'
+
+    try:
+        with open(filename, 'w') as f:
+            f.write(document_content)
+        print(f"\n Document has been saved to: {filename}")
+        return f"Document has been successfullly saved to '{filename}'."
+    except Exception as e:
+        return f"Error saving document: {str(e)}"
+    
+@tool
+def send_email(name: str, to: str, subject: str, pdf_path: Optional[str], document_content: str):
+    """Sends an email to the desired recipient using the user's Gmail Account"""
+    try:
+        if current_user not in mailbox_con:
+            return f"Error: No mailbox credentials found for user {current_user}"
+        
+        utils.send_mails(current_user, mailbox_con[current_user][1], name, to, subject, pdf_path, document_content)
+        print(f"Mail Sent Successfully to {to} for the subject {subject}")
+        return "Mail Sent Successfully"
+    except Exception as e:
+        print(f"Error: {e}")
+
+
+
+
+
+
+
+tools = [connect_to_gmail, disconnect_from_gmail, search_emails, draft_email, save_email, send_email]
 model = ChatOpenAI(model='gpt-4o-mini').bind_tools(tools)
 
 def agent(state: AgentState) -> AgentState:
@@ -175,6 +219,3 @@ def run_agent():
 if __name__ == "__main__":
     run_agent()
 
-# # inputs = {"messages": [("user", "Connect to my gmail account. my id is ankita.av.934@gmail.com and my password is usls gyjc yita lopu")]}
-# inputs = {"messages": [('user', "Connect to my gmail account. my id is ankita.av.934@gmail.com and my password is usls gyjc yita lopu, then Disconnect from my gmail account")]}
-# print_message(app.stream(inputs, stream_mode='values'))
